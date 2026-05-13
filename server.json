@@ -1,0 +1,44 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "tv.tootie/apprise-mcp",
+  "title": "Apprise MCP",
+  "description": "MCP server for Apprise universal push notifications — send alerts to Slack, Discord, PagerDuty, and 80+ services.",
+  "repository": {
+    "url": "https://github.com/jmagar/apprise-mcp",
+    "source": "github"
+  },
+  "version": "0.1.0",
+  "packages": [
+    {
+      "registryType": "oci",
+      "identifier": "ghcr.io/jmagar/apprise-mcp:0.1.0",
+      "version": "0.1.0",
+      "environmentVariables": [
+        {
+          "name": "APPRISE_URL",
+          "description": "Base URL of the Apprise API server (e.g. http://apprise:8000).",
+          "isRequired": true,
+          "isSecret": false
+        },
+        {
+          "name": "APPRISE_TOKEN",
+          "description": "Bearer token for the upstream Apprise API server. Leave unset for open installs.",
+          "isRequired": false,
+          "isSecret": true
+        },
+        {
+          "name": "APPRISE_MCP_TOKEN",
+          "description": "Bearer token for MCP endpoint authentication.",
+          "isRequired": false,
+          "isSecret": true
+        }
+      ]
+    }
+  ],
+  "remotes": [
+    {
+      "type": "streamable-http",
+      "url": "https://apprise.tootie.tv/mcp"
+    }
+  ]
+}

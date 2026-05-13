@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
+  "name": "apprise-mcp",
+  "description": "Skill for sending push notifications via the standalone apprise-mcp server.",
+  "author": {
+    "name": "Jacob Magar",
+    "email": "jmagar@gmail.com"
+  },
+  "license": "MIT",
+  "keywords": [
+    "apprise",
+    "notifications",
+    "push",
+    "alerts",
+    "mcp"
+  ]
+}

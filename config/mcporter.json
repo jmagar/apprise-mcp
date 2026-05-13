@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "apprise": {
+      "url": "http://localhost:8765/mcp",
+      "transport": "http"
+    }
+  }
+}

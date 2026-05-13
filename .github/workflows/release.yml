@@ -1,0 +1,91 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    name: Build ${{ matrix.target }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          - target: x86_64-unknown-linux-musl
+            os: ubuntu-latest
+            binary: apprise
+          - target: aarch64-unknown-linux-musl
+            os: ubuntu-latest
+            binary: apprise
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Install cross
+        run: cargo install cross --locked
+
+      - name: Build release binary
+        run: cross build --release --locked --target ${{ matrix.target }}
+
+      - name: Package binary
+        run: |
+          VERSION="${GITHUB_REF_NAME}"
+          BINARY="${{ matrix.binary }}"
+          TARGET="${{ matrix.target }}"
+          ARCHIVE="${BINARY}-${VERSION}-${TARGET}.tar.gz"
+          cp "target/$TARGET/release/$BINARY" "./$BINARY"
+          tar -czf "$ARCHIVE" "$BINARY"
+          echo "ARCHIVE=$ARCHIVE" >> "$GITHUB_ENV"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.target }}
+          path: ${{ env.ARCHIVE }}
+
+  release:
+    name: Create GitHub Release
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Configure Git LFS
+        run: git lfs install
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts/
+
+      - name: Copy linux/amd64 binary to bin/
+        run: |
+          mkdir -p bin
+          tar -xzf artifacts/x86_64-unknown-linux-musl/apprise-*.tar.gz -C /tmp
+          cp /tmp/apprise bin/apprise
+          git lfs track "bin/*" || true
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add .gitattributes bin/apprise
+          git diff --cached --quiet || git commit -m "chore: update bin/apprise for ${{ github.ref_name }}"
+          git push origin HEAD:main || true
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: artifacts/**/*.tar.gz
+          generate_release_notes: true
+          fail_on_unmatched_files: false

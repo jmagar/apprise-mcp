@@ -1,0 +1,22 @@
+# apprise-mcp configuration
+# All values here are non-secret. Secrets and URLs belong in .env.
+# Environment variables override these values at runtime.
+
+[mcp]
+# MCP HTTP server bind address
+host = "0.0.0.0"
+port = 40050
+server_name = "apprise-mcp"
+
+# Auth mode: "bearer" (static token) or "oauth" (Google OAuth/JWT)
+# Secrets for oauth mode go in .env (APPRISE_MCP_GOOGLE_CLIENT_ID, etc.)
+# [mcp.auth]
+# mode = "bearer"
+# public_url = "https://apprise.example.com"
+# admin_email = "you@example.com"
+
+# Additional allowed CORS origins (comma-separated via APPRISE_MCP_ALLOWED_ORIGINS env)
+allowed_origins = []
+
+# Additional allowed Host header values for the MCP server
+allowed_hosts = []
