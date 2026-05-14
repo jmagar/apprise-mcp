@@ -1,11 +1,17 @@
 {
   "name": "apprise-mcp",
-  "version": "0.1.0",
-  "description": "Apprise MCP server — universal push notification bridge for Codex.",
+  "description": "Apprise MCP server \u2014 universal push notification bridge for Codex.",
   "homepage": "https://github.com/jmagar/apprise-mcp",
   "repository": "https://github.com/jmagar/apprise-mcp",
   "license": "MIT",
-  "keywords": ["apprise", "notifications", "push", "alerts", "mcp", "homelab"],
+  "keywords": [
+    "apprise",
+    "notifications",
+    "push",
+    "alerts",
+    "mcp",
+    "homelab"
+  ],
   "skills": "./skills/",
   "mcpServers": "./.mcp.json",
   "interface": {
@@ -14,7 +20,10 @@
     "longDescription": "Send alerts to Slack, Discord, PagerDuty, Telegram, email, and 80+ other services through the Apprise universal notification library. Supports tagged group delivery, stateless one-off URL notifications, and server health checks.",
     "developerName": "Jacob Magar",
     "category": "Infrastructure",
-    "capabilities": ["Read", "Write"],
+    "capabilities": [
+      "Read",
+      "Write"
+    ],
     "websiteURL": "https://github.com/jmagar/apprise-mcp",
     "defaultPrompt": [
       "Send an alert to all configured Apprise notification services.",

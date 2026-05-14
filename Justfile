@@ -32,12 +32,6 @@ docker-down:
 docker-build:
     docker build -t apprise-mcp -f config/Dockerfile .
 
-up:
-    docker compose up -d
-
-down:
-    docker compose down
-
 restart:
     docker compose restart
 
@@ -45,7 +39,7 @@ logs:
     docker compose logs -f
 
 health:
-    curl -sf http://localhost:8765/health | jq .
+    curl -sf http://localhost:40050/health | jq .
 
 repair:
     #!/usr/bin/env bash
@@ -92,21 +86,21 @@ validate-skills:
 generate-cli:
     #!/usr/bin/env bash
     set -euo pipefail
-    echo "Server must be running on port 8765 (run 'just dev' first)"
-    echo "Generated CLI embeds your OAuth token — do not commit or share"
+    echo "Server must be running on port 40050 (run 'just dev' first)"
+    echo "Generated CLI embeds your token — do not commit or share"
     mkdir -p dist dist/.cache
     current_hash=$(timeout 10 curl -sf \
-      -H "Authorization: Bearer $MCP_TOKEN" \
+      -H "Authorization: Bearer ${APPRISE_MCP_TOKEN:-}" \
       -H "Accept: application/json, text/event-stream" \
-      http://localhost:8765/mcp/tools/list 2>/dev/null | sha256sum | cut -d' ' -f1 || echo "nohash")
+      http://localhost:40050/mcp/tools/list 2>/dev/null | sha256sum | cut -d' ' -f1 || echo "nohash")
     cache_file="dist/.cache/apprise-mcp-cli.schema_hash"
     if [[ -f "$cache_file" ]] && [[ "$(cat "$cache_file")" == "$current_hash" ]] && [[ -f "dist/apprise-mcp-cli" ]]; then
       echo "SKIP: apprise-mcp tool schema unchanged — use existing dist/apprise-mcp-cli"
       exit 0
     fi
     timeout 30 mcporter generate-cli \
-      --command http://localhost:8765/mcp \
-      --header "Authorization: Bearer $MCP_TOKEN" \
+      --command http://localhost:40050/mcp \
+      --header "Authorization: Bearer ${APPRISE_MCP_TOKEN:-}" \
       --name apprise-mcp-cli \
       --output dist/apprise-mcp-cli
     printf '%s' "$current_hash" > "$cache_file"
@@ -146,9 +140,6 @@ publish bump="patch":
     echo "Version: ${CURRENT} → ${NEW}"
     sed -i "s/^version = \"${CURRENT}\"/version = \"${NEW}\"/" Cargo.toml
     cargo check 2>/dev/null || true
-    for f in .claude-plugin/plugin.json .codex-plugin/plugin.json gemini-extension.json; do
-      [ -f "$f" ] && python3 -c 'import json,sys; p=sys.argv[1]; v=sys.argv[2]; d=json.load(open(p)); d["version"]=v; json.dump(d,open(p,"w"),indent=2); open(p,"a").write("\n")' "$f" "${NEW}"
-    done
     git add -A && git commit -m "release: v${NEW}" && git tag "v${NEW}" && git push origin main --tags
     echo "Tagged v${NEW} — publish workflow will run automatically"
 
