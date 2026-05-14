@@ -57,6 +57,7 @@ test-support = []
 
 [dev-dependencies]
 apprise-mcp = { path = ".", features = ["test-support"] }
+tempfile = "3"
 tokio = { version = "1", features = ["full"] }
 rmcp = { version = "1.6.0", default-features = false, features = [
   "client",

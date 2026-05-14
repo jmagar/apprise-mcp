@@ -54,7 +54,9 @@ impl AppriseService {
         notify_type: &NotifyType,
     ) -> Result<Value> {
         let (body, truncation_warn) = truncate_body(body);
-        let _span = tracing::info_span!("upstream.notify", tag = %tag); let _guard = _span.enter(); drop(_guard);
+        let _span = tracing::info_span!("upstream.notify", tag = %tag);
+        let _guard = _span.enter();
+        drop(_guard);
         self.counters.inc_upstream_calls();
 
         let result = self
@@ -86,7 +88,9 @@ impl AppriseService {
         notify_type: &NotifyType,
     ) -> Result<Value> {
         let (body, truncation_warn) = truncate_body(body);
-        let _span = tracing::info_span!("upstream.notify_all"); let _guard = _span.enter(); drop(_guard);
+        let _span = tracing::info_span!("upstream.notify_all");
+        let _guard = _span.enter();
+        drop(_guard);
         self.counters.inc_upstream_calls();
 
         let result = self
@@ -119,7 +123,9 @@ impl AppriseService {
         notify_type: &NotifyType,
     ) -> Result<Value> {
         let (body, truncation_warn) = truncate_body(body);
-        let _span = tracing::info_span!("upstream.notify_url"); let _guard = _span.enter(); drop(_guard);
+        let _span = tracing::info_span!("upstream.notify_url");
+        let _guard = _span.enter();
+        drop(_guard);
         self.counters.inc_upstream_calls();
 
         let result = self
@@ -145,7 +151,9 @@ impl AppriseService {
 
     /// Health-check the Apprise server.
     pub async fn health(&self) -> Result<Value> {
-        let _span = tracing::info_span!("upstream.health"); let _guard = _span.enter(); drop(_guard);
+        let _span = tracing::info_span!("upstream.health");
+        let _guard = _span.enter();
+        drop(_guard);
         self.counters.inc_upstream_calls();
 
         let result = self.client.health().await.map_err(|e| {

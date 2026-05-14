@@ -7,23 +7,25 @@ RUN apt-get update && apt-get install -y pkg-config libssl-dev && rm -rf /var/li
 
 # Cache deps first (dummy main to warm the registry)
 COPY Cargo.toml Cargo.lock ./
+# Strip xtask workspace member (not in Docker build context)
+RUN sed -i 's/, "xtask"//g; s/"xtask", //g; s/"xtask"//g' Cargo.toml
 RUN --mount=type=cache,id=apprise-cargo-registry,target=/usr/local/cargo/registry,sharing=locked \
     --mount=type=cache,id=apprise-cargo-git,target=/usr/local/cargo/git,sharing=locked \
     --mount=type=cache,id=apprise-cargo-target,target=/app/target,sharing=locked \
-    mkdir src && echo "fn main() {}" > src/main.rs && cargo build --release --locked && rm -rf src
+    mkdir src && echo "fn main() {}" > src/main.rs && cargo build --release --locked -p apprise-mcp && rm -rf src
 
 # Build the real binary
 COPY src/ src/
 RUN --mount=type=cache,id=apprise-cargo-registry,target=/usr/local/cargo/registry,sharing=locked \
     --mount=type=cache,id=apprise-cargo-git,target=/usr/local/cargo/git,sharing=locked \
     --mount=type=cache,id=apprise-cargo-target,target=/app/target,sharing=locked \
-    touch src/main.rs && cargo build --release --locked && \
+    touch src/main.rs && cargo build --release --locked -p apprise-mcp && \
     cp target/release/apprise /usr/local/bin/apprise
 
 # ── Runtime image ─────────────────────────────────────────────────────────────
 FROM debian:bookworm-slim
 
-RUN apt-get update && apt-get install -y ca-certificates curl && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y ca-certificates curl gosu && rm -rf /var/lib/apt/lists/*
 
 COPY --from=builder /usr/local/bin/apprise /usr/local/bin/apprise
 
@@ -34,7 +36,6 @@ RUN groupadd --gid 1000 apprise && \
 
 ENV RUST_LOG=info
 
-USER 1000:1000
 
 EXPOSE 40050/tcp
 
@@ -43,4 +44,7 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
 
 LABEL io.modelcontextprotocol.server.name="apprise-mcp"
 
-CMD ["apprise", "serve", "mcp"]
+COPY entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+ENTRYPOINT ["/entrypoint.sh"]
+CMD ["serve", "mcp"]

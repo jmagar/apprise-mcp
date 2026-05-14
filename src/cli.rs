@@ -1,12 +1,18 @@
 use anyhow::{bail, Result};
 use std::net::TcpListener;
+use std::path::{Path, PathBuf};
 use std::time::Instant;
 
-use apprise_mcp::{app::AppriseService, apprise::NotifyType, config::Config};
+use apprise_mcp::{
+    app::AppriseService,
+    apprise::NotifyType,
+    config::{AuthMode, Config},
+};
 
 // ── command enum ──────────────────────────────────────────────────────────────
 
 pub enum CliCommand {
+    Setup(SetupCommand),
     Notify {
         body: String,
         tag: Option<String>,
@@ -24,6 +30,13 @@ pub enum CliCommand {
     Help,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SetupCommand {
+    Check,
+    Repair,
+    PluginHook { no_repair: bool },
+}
+
 impl CliCommand {
     pub fn parse(args: &[String]) -> Result<Self> {
         let rest: Vec<&str> = args.iter().map(String::as_str).collect();
@@ -32,6 +45,11 @@ impl CliCommand {
             ["health"] => Ok(Self::Health),
             ["doctor"] => Ok(Self::Doctor),
             ["help"] => Ok(Self::Help),
+            ["setup", "check"] => Ok(Self::Setup(SetupCommand::Check)),
+            ["setup", "repair"] => Ok(Self::Setup(SetupCommand::Repair)),
+            ["setup", "plugin-hook", flags @ ..] => Ok(Self::Setup(SetupCommand::PluginHook {
+                no_repair: flags.contains(&"--no-repair"),
+            })),
 
             ["notify", body, rest @ ..] => {
                 let tag = flag_str(rest, "--tag")?;
@@ -82,7 +100,7 @@ pub async fn run(service: &AppriseService, cmd: CliCommand, json: bool) -> Resul
 
     let result = match cmd {
         CliCommand::Health => service.health().await?,
-        CliCommand::Help | CliCommand::Doctor => unreachable!(),
+        CliCommand::Help | CliCommand::Doctor | CliCommand::Setup(_) => unreachable!(),
         CliCommand::Notify {
             body,
             tag,
@@ -135,6 +153,238 @@ pub async fn run(service: &AppriseService, cmd: CliCommand, json: bool) -> Resul
     Ok(())
 }
 
+// ── setup command ────────────────────────────────────────────────────────────
+
+#[derive(Debug, serde::Serialize)]
+struct SetupFailure {
+    code: &'static str,
+    message: String,
+}
+
+#[derive(Debug, serde::Serialize)]
+struct SetupReport {
+    exit_policy: &'static str,
+    ran_repair: bool,
+    no_repair: bool,
+    blocking_failures: Vec<SetupFailure>,
+    advisory_failures: Vec<SetupFailure>,
+}
+
+impl SetupReport {
+    fn new(no_repair: bool) -> Self {
+        Self {
+            exit_policy: "success",
+            ran_repair: false,
+            no_repair,
+            blocking_failures: Vec::new(),
+            advisory_failures: Vec::new(),
+        }
+    }
+
+    fn finish(mut self) -> Self {
+        self.exit_policy = if !self.blocking_failures.is_empty() {
+            "blocking_failure"
+        } else if !self.advisory_failures.is_empty() {
+            "advisory_failure"
+        } else {
+            "success"
+        };
+        self
+    }
+}
+
+pub async fn run_setup(config: &Config, command: SetupCommand) -> Result<()> {
+    let report = match command {
+        SetupCommand::Check => setup_check(config, true),
+        SetupCommand::Repair => setup_repair(config)?,
+        SetupCommand::PluginHook { no_repair } => setup_plugin_hook(config, no_repair)?,
+    };
+
+    println!("{}", serde_json::to_string_pretty(&report)?);
+    if !report.blocking_failures.is_empty() {
+        std::process::exit(1);
+    }
+    Ok(())
+}
+
+fn setup_plugin_hook(config: &Config, no_repair: bool) -> Result<SetupReport> {
+    let initial = setup_check(config, no_repair);
+    if initial.blocking_failures.is_empty() || no_repair {
+        return Ok(initial);
+    }
+    setup_repair(config)
+}
+
+fn setup_check(config: &Config, no_repair: bool) -> SetupReport {
+    let mut report = SetupReport::new(no_repair);
+    let data_dir = setup_data_dir();
+
+    if !data_dir.is_dir() {
+        report.blocking_failures.push(SetupFailure {
+            code: "appdata_missing",
+            message: format!("appdata directory does not exist: {}", data_dir.display()),
+        });
+    }
+    let env_path = data_dir.join(".env");
+    if !env_path.is_file() {
+        report.advisory_failures.push(SetupFailure {
+            code: "env_file_missing",
+            message: format!(
+                "{} does not exist; setup repair will create one, but process env can supply values",
+                env_path.display()
+            ),
+        });
+    }
+
+    if config.apprise.url.is_empty() {
+        report.blocking_failures.push(SetupFailure {
+            code: "missing_apprise_url",
+            message: "APPRISE_URL is required".into(),
+        });
+    }
+
+    validate_setup_auth(config, &mut report);
+    check_setup_port(config.mcp.port, &mut report);
+
+    report.finish()
+}
+
+fn setup_repair(config: &Config) -> Result<SetupReport> {
+    let data_dir = setup_data_dir();
+    std::fs::create_dir_all(&data_dir)?;
+    write_setup_env(&data_dir, config)?;
+
+    let mut report = setup_check(config, false);
+    report.ran_repair = true;
+    if report
+        .blocking_failures
+        .iter()
+        .any(|failure| failure.code == "appdata_missing")
+    {
+        report = setup_check(config, false);
+        report.ran_repair = true;
+    }
+
+    Ok(report.finish())
+}
+
+fn validate_setup_auth(config: &Config, report: &mut SetupReport) {
+    if config.mcp.no_auth {
+        return;
+    }
+
+    if config.mcp.auth.mode == AuthMode::OAuth {
+        if config
+            .mcp
+            .auth
+            .public_url
+            .as_deref()
+            .unwrap_or("")
+            .is_empty()
+        {
+            report.blocking_failures.push(SetupFailure {
+                code: "missing_oauth_public_url",
+                message: "APPRISE_MCP_PUBLIC_URL is required for OAuth mode".into(),
+            });
+        }
+        if config
+            .mcp
+            .auth
+            .google_client_id
+            .as_deref()
+            .unwrap_or("")
+            .is_empty()
+        {
+            report.blocking_failures.push(SetupFailure {
+                code: "missing_oauth_client_id",
+                message: "APPRISE_MCP_GOOGLE_CLIENT_ID is required for OAuth mode".into(),
+            });
+        }
+        if config
+            .mcp
+            .auth
+            .google_client_secret
+            .as_deref()
+            .unwrap_or("")
+            .is_empty()
+        {
+            report.blocking_failures.push(SetupFailure {
+                code: "missing_oauth_client_secret",
+                message: "APPRISE_MCP_GOOGLE_CLIENT_SECRET is required for OAuth mode".into(),
+            });
+        }
+        if config.mcp.auth.admin_email.is_empty() {
+            report.blocking_failures.push(SetupFailure {
+                code: "missing_oauth_admin_email",
+                message: "APPRISE_MCP_AUTH_ADMIN_EMAIL is required for OAuth mode".into(),
+            });
+        }
+    } else if config.mcp.api_token.as_deref().unwrap_or("").is_empty() {
+        report.blocking_failures.push(SetupFailure {
+            code: "missing_mcp_token",
+            message: "APPRISE_MCP_TOKEN is required unless no_auth or OAuth mode is enabled".into(),
+        });
+    }
+}
+
+fn check_setup_port(port: u16, report: &mut SetupReport) {
+    if TcpListener::bind(("127.0.0.1", port)).is_err() {
+        report.advisory_failures.push(SetupFailure {
+            code: "mcp_port_in_use",
+            message: format!("MCP port {port} is already in use"),
+        });
+    }
+}
+
+fn setup_data_dir() -> PathBuf {
+    std::env::var_os("CLAUDE_PLUGIN_DATA")
+        .or_else(|| std::env::var_os("APPRISE_HOME"))
+        .map(PathBuf::from)
+        .unwrap_or_else(apprise_mcp::config::default_data_dir)
+}
+
+fn write_setup_env(data_dir: &Path, config: &Config) -> Result<()> {
+    let mut lines = vec![
+        format!("APPRISE_URL={}", config.apprise.url),
+        format!("APPRISE_MCP_HOST={}", config.mcp.host),
+        format!("APPRISE_MCP_PORT={}", config.mcp.port),
+        format!("APPRISE_MCP_NO_AUTH={}", config.mcp.no_auth),
+    ];
+
+    if !config.apprise.token.is_empty() {
+        lines.push(format!("APPRISE_TOKEN={}", config.apprise.token));
+    }
+    if let Some(token) = config
+        .mcp
+        .api_token
+        .as_deref()
+        .filter(|value| !value.is_empty())
+    {
+        lines.push(format!("APPRISE_MCP_TOKEN={token}"));
+    }
+    if config.mcp.auth.mode == AuthMode::OAuth {
+        lines.push("APPRISE_MCP_AUTH_MODE=oauth".into());
+        if let Some(value) = &config.mcp.auth.public_url {
+            lines.push(format!("APPRISE_MCP_PUBLIC_URL={value}"));
+        }
+        if let Some(value) = &config.mcp.auth.google_client_id {
+            lines.push(format!("APPRISE_MCP_GOOGLE_CLIENT_ID={value}"));
+        }
+        if let Some(value) = &config.mcp.auth.google_client_secret {
+            lines.push(format!("APPRISE_MCP_GOOGLE_CLIENT_SECRET={value}"));
+        }
+        if !config.mcp.auth.admin_email.is_empty() {
+            lines.push(format!(
+                "APPRISE_MCP_AUTH_ADMIN_EMAIL={}",
+                config.mcp.auth.admin_email
+            ));
+        }
+    }
+
+    std::fs::write(data_dir.join(".env"), format!("{}\n", lines.join("\n")))?;
+    Ok(())
+}
+
 // ── help text ─────────────────────────────────────────────────────────────────
 
 const HELP_TEXT: &str = "\
@@ -147,6 +397,10 @@ Commands:
                       Stateless one-off notification to an Apprise URL schema.
   health              Check the Apprise API server health endpoint.
   doctor              Pre-flight environment validation.
+  setup check         Check plugin setup without mutating appdata.
+  setup repair        Create missing appdata/env setup files.
+  setup plugin-hook [--no-repair]
+                      Plugin hook JSON setup contract.
   help                Show this help text.
 
 Options:

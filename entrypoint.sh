@@ -3,6 +3,9 @@
 # Runs as root, validates config, then exec's the service as 1000:1000
 set -e
 
+SERVICE_NAME="apprise"
+BINARY="/usr/local/bin/${SERVICE_NAME}"
+
 DATA_DIR="${DATA_DIR:-/data}"
 
 # Validate required env vars (fail fast before dropping privileges)
@@ -25,4 +28,4 @@ if [ -f "${DATA_DIR}/.env" ]; then
 fi
 
 # Drop to service user and exec the binary
-exec su-exec 1000:1000 "$@"
+exec gosu 1000:1000 "${BINARY}" "$@"

@@ -108,9 +108,9 @@ main() {
   if [[ "$DRY_RUN" != true ]]; then sd="$(make_tmpdir)"; bs="$sd/before.sha256"; as="$sd/after.sha256"; snapshot_references "$bs"; fi
   mkdir -p "$REF_DIR/apprise/docs" "$REF_DIR/apprise/repos" "$REF_DIR/mcp/docs" "$REF_DIR/mcp/repos"
   if [[ "$SKIP_CRAWL" != true ]]; then
-    # Apprise wiki is the best public documentation for the API server
-    crawl_docs "https://github.com/caronc/apprise/wiki"  "github.com"              "apprise/docs"
-    crawl_docs "https://modelcontextprotocol.io"         "modelcontextprotocol.io" "mcp/docs"
+    # Apprise API server docs (GitHub wiki is blocked by Axon; use PyPI project page instead)
+    crawl_docs "https://pypi.org/project/apprise/"       "pypi.org"                "apprise/docs" || log "WARN: apprise docs crawl failed, continuing"
+    crawl_docs "https://modelcontextprotocol.io"         "modelcontextprotocol.io" "mcp/docs"     || log "WARN: mcp docs crawl failed, continuing"
   fi
   if [[ "$SKIP_REPOMIX" != true ]]; then
     # Apprise library source (plugin directory for notification schemas)

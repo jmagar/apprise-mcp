@@ -7,7 +7,6 @@ services:
       dockerfile: config/Dockerfile
     container_name: apprise-mcp
     restart: unless-stopped
-    user: "${PUID:-1000}:${PGID:-1000}"
     env_file:
       - path: .env
         required: false

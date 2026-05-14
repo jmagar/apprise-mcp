@@ -25,7 +25,7 @@ pub mod testing {
             token: String::new(),
         })
         .expect("stub client should build");
-        AppriseService::new(client)
+        AppriseService::new(client, "http://localhost:1".into())
     }
 
     pub fn stub_state() -> AppState {

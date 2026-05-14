@@ -103,10 +103,16 @@ async fn run_cli(args: Vec<String>) -> Result<()> {
     let json = args.iter().any(|a| a == "--json");
     let filtered: Vec<String> = args.into_iter().filter(|a| a != "--json").collect();
 
-    // doctor runs before service construction — it validates the environment
+    // doctor/setup run before service construction.
     if matches!(filtered.as_slice(), [c] if c == "doctor") {
         let config = Config::load().unwrap_or_default();
         return cli::run_doctor(&config, json).await;
+    }
+
+    let parsed = cli::CliCommand::parse(&filtered)?;
+    if let cli::CliCommand::Setup(command) = parsed {
+        let config = Config::load()?;
+        return cli::run_setup(&config, command).await;
     }
 
     let config = Config::load()?;
@@ -114,8 +120,7 @@ async fn run_cli(args: Vec<String>) -> Result<()> {
         AppriseClient::new(&config.apprise)?,
         config.apprise.url.clone(),
     );
-    let cmd = cli::CliCommand::parse(&filtered)?;
-    cli::run(&service, cmd, json).await
+    cli::run(&service, parsed, json).await
 }
 
 async fn build_state(config: Config) -> Result<AppState> {
@@ -195,6 +200,9 @@ fn print_usage() {
   apprise [serve]                    Start MCP HTTP server (default)
   apprise mcp                        Start MCP stdio transport
   apprise doctor                     Pre-flight environment validation
+  apprise setup check                Check plugin setup without mutating appdata
+  apprise setup repair               Create missing appdata/env setup files
+  apprise setup plugin-hook [--no-repair]  Plugin hook JSON contract
 
 Notification:
   apprise notify <body> [--tag TAG] [--title T] [--type info|success|warning|failure]
