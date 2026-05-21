@@ -1,0 +1,47 @@
+name: apprise-mcp
+
+x-common-service: &common-service
+  networks:
+    - jakenet
+  restart: unless-stopped
+  extra_hosts:
+    - "host.docker.internal:host-gateway"
+  ulimits:
+    nofile:
+      soft: 65535
+      hard: 65535
+  logging:
+    driver: "json-file"
+    options:
+      max-size: "10m"
+      max-file: "3"
+      compress: "true"
+
+services:
+  apprise-mcp:
+    <<: *common-service
+    image: ghcr.io/jmagar/apprise-mcp:${APPRISE_MCP_VERSION:-latest}
+    container_name: apprise-mcp
+    env_file:
+      - path: .env
+        required: false
+    ports:
+      - "${APPRISE_MCP_HOST_PORT:-40050}:40050/tcp"
+    volumes:
+      - ${HOME}/.apprise:/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:40050/health || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: '0.5'
+
+networks:
+  jakenet:
+    name: ${DOCKER_NETWORK:-jakenet}
+    external: true

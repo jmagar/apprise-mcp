@@ -1,34 +1,16 @@
+name: apprise-mcp
+
+# Local development stack. Builds from this checkout.
 services:
   apprise-mcp:
-    # Default to the published image; use --build for local source development.
-    image: ghcr.io/jmagar/apprise-mcp:${APPRISE_MCP_VERSION:-latest}
+    extends:
+      file: docker-compose.prod.yml
+      service: apprise-mcp
+    image: apprise-mcp:dev
+    pull_policy: build
     build:
       context: .
       dockerfile: config/Dockerfile
-    container_name: apprise-mcp
-    restart: unless-stopped
-    env_file:
-      - path: .env
-        required: false
-    ports:
-      - "${APPRISE_MCP_HOST_PORT:-40050}:40050/tcp"
-    volumes:
-      - ${HOME}/.apprise:/data
-    networks:
-      - jakenet
-
-    healthcheck:
-      test: ["CMD-SHELL", "curl -sf http://localhost:40050/health || exit 1"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-      start_period: 10s
-
-    deploy:
-      resources:
-        limits:
-          memory: 256M
-          cpus: '0.5'
 
 networks:
   jakenet:
