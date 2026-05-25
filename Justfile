@@ -69,18 +69,12 @@ test-mcporter:
     bash tests/mcporter/test-tools.sh
 
 validate-skills:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    found=0
-    for dir in plugins/skills/*; do
-      [[ -d "$dir" ]] || continue
-      found=1
-      test -f "$dir/SKILL.md" || { echo "MISSING: $dir/SKILL.md"; exit 1; }
-      grep -q '^name:' "$dir/SKILL.md" || { echo "MISSING name: $dir/SKILL.md"; exit 1; }
-      grep -q '^description:' "$dir/SKILL.md" || { echo "MISSING description: $dir/SKILL.md"; exit 1; }
-    done
-    [[ "$found" -eq 1 ]] || { echo "MISSING: plugins/skills/*"; exit 1; }
-    echo "OK"
+    bash scripts/validate-plugin-layout.sh
+
+validate-plugin: validate-skills
+
+runtime-current:
+    bash scripts/check-runtime-current.sh --unit apprise-mcp.service --service apprise-mcp --expected-binary target/release/apprise
 
 # Generate a standalone CLI for this server (requires running server; HTTP-only transport)
 generate-cli:
@@ -118,8 +112,9 @@ build-plugin: release
     if [ ! -x "$target_dir/release/apprise" ] && [ -x ".cache/cargo/release/apprise" ]; then
       target_dir=".cache/cargo"
     fi
-    mkdir -p bin
+    mkdir -p bin plugins/apprise/bin
     install -m 755 "$target_dir/release/apprise" bin/apprise
+    install -m 755 "$target_dir/release/apprise" plugins/apprise/bin/apprise
 
 # Publish: bump version, tag, push (triggers crates.io + Docker publish)
 publish bump="patch":
