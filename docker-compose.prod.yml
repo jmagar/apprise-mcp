@@ -2,7 +2,7 @@ name: apprise-mcp
 
 x-common-service: &common-service
   networks:
-    - jakenet
+    - apprise-mcp
   restart: unless-stopped
   extra_hosts:
     - "host.docker.internal:host-gateway"
@@ -42,6 +42,6 @@ services:
           cpus: '0.5'
 
 networks:
-  jakenet:
-    name: ${DOCKER_NETWORK:-jakenet}
+  apprise-mcp:
+    name: ${DOCKER_NETWORK:-apprise-mcp}
     external: true
